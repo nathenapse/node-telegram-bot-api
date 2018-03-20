@@ -49,6 +49,7 @@ const _deprecatedMessageTypes = [
   'new_chat_participant', 'left_chat_participant'
 ];
 
+const _maxMessageLength = 4000;
 
 if (!process.env.NTBA_FIX_319) {
   // Enable Promise cancellation.
@@ -370,6 +371,40 @@ class TelegramBot extends EventEmitter {
   }
 
   /**
+   * A Foreach that executes callbacks one by one
+   * @param  {Array} array of messages
+   * @return {Promise}
+   * @private
+   */
+  async _asyncForEach(array, callback) {
+    let responds = []
+    for (let index = 0; index < array.length; index++) {
+      responds.push(await callback(array[index], index, array))
+    }
+    return responds
+  }
+
+  /**
+   * Chunck a string to array of strings not exciding a length
+   * @param  {String} string to be chuncked
+   * @param  {length} length to chunck array to
+   * @return {Array} Chuncked array
+   * @private
+   */
+  _chunkString(str, len) {
+    var _size = Math.ceil(str.length / len),
+      _ret = new Array(_size),
+      _offset;
+
+    for (var _i = 0; _i < _size; _i++) {
+      _offset = _i * len;
+      _ret[_i] = str.substring(_offset, _offset + len);
+    }
+
+    return _ret;
+  }
+
+  /**
    * Start polling.
    * Rejects returned promise if a WebHook is being used by this instance.
    * @param  {Object} [options]
@@ -676,6 +711,23 @@ class TelegramBot extends EventEmitter {
     form.chat_id = chatId;
     form.text = text;
     return this._request('sendMessage', { form });
+  }
+
+
+
+  /**
+   * Send a very long text message.
+   * @param  {Number|String} chatId Unique identifier for the message recipient
+   * @param  {String} text Text of the message to be sent
+   * @param  {Object} [options] Additional Telegram query options
+   * @return {Promise}
+   * @see https://core.telegram.org/bots/api#sendmessage
+   */
+  sendLongMessage(id, longMessage, option) {
+    let stringChunk = this._chunkString(longMessage, _maxMessageLength)
+    return this._asyncForEach(stringChunk, (message) => {
+      return this.sendMessage(id, message, option)
+    })
   }
 
   /**
